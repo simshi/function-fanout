@@ -1,0 +1,8 @@
+# intermediate files
+.[a|o]
+.obj
+
+# eclipse project
+.cproject
+.project
+
