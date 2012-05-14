@@ -1,16 +1,20 @@
-SUT_OUTPUT := ut
-SUT_SRC_DIRS := 
+LLVM_LIBDIR := $(shell llvm-config --libdir)
+LLVM_OBJ_ROOT := $(shell llvm-config --obj-root)
 
-WK_OBJS_DIR := _objs
-WK_SRC_DIRS := $(foreach d,$(SUT_SRC_DIRS),$(SUT_ROOT)/$d)
+SUT_OUTPUT := fanout_ut
 
-.PHONY: all compile clean
-all: $(SUT_OUTPUT)
-	./$<
+SUT_ROOT := ..
+SUT_SRC_DIRS := .
 
-compile: $(SUT_OUTPUT)
-clean:
-	$(SILENCE)rm -rf $(WK_OBJS_DIR)
+SUT_CPPFLAGS := -I../../../include -I../../../../../include\
+                -I../../../../../build/include -I../../../../../build/tools/clang/include\
+                -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS
+
+SUT_TST_CXXFLAGS := -I.. -Wextra
+
+SUT_LDFLAGS := -L$(LLVM_LIBDIR) -lLLVMSupport -ldl
+
+include GTestWorker.mk
 
 product:
-	$(SILENCE)$(MAKE) -C ~/workspace/llvm-project/rel30/build/tools/clang/tools/function-fanout
+	$(SILENCE)$(MAKE) -C $(LLVM_OBJ_ROOT)/tools/clang/tools/function-fanout

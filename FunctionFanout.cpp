@@ -115,6 +115,12 @@ protected:
       return new FunctionFanoutConsumer(CI);
    }
 
+   // override PluginASTAction->ASTFrontendAction->FrontendAction::EndSourceFileAction()
+   // callback should only be called following a successful processing
+   virtual void EndSourceFileAction()
+   {
+      //close actions?
+   }
    bool ParseArgs(const CompilerInstance &CI, const std::vector<std::string>& args)
    {
       for (unsigned i = 0, e = args.size(); i != e; ++i) {
