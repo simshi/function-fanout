@@ -3,8 +3,8 @@
 
 namespace FunctionFanout {
 
-JSONFormatter::JSONFormatter(llvm::raw_ostream& ost) :
-            ost_(ost)
+JSONFormatter::JSONFormatter(llvm::raw_ostream* ost) :
+            ost_(*ost)
 {
    // TODO Auto-generated constructor stub
 
@@ -15,4 +15,14 @@ JSONFormatter::~JSONFormatter()
    // TODO Auto-generated destructor stub
 }
 
+void JSONFormatter::BeginSourceFile()
+{
+   ost_ << "{\n";
+}
+
+void JSONFormatter::EndSourceFile()
+{
+   ost_ << "}\n";
+   ost_.flush();
+}
 } /* namespace FunctionFanout */

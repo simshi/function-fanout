@@ -6,8 +6,10 @@ namespace FunctionFanout {
 class JSONFormatter
 {
 public:
-   JSONFormatter(llvm::raw_ostream&);
+   JSONFormatter(llvm::raw_ostream*);
    virtual ~JSONFormatter();
+   virtual void BeginSourceFile();
+   virtual void EndSourceFile();
 private:
    llvm::raw_ostream& ost_;
 };
