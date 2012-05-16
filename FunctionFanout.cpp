@@ -15,34 +15,33 @@
 using namespace clang;
 
 namespace FunctionFanout {
-void print_function_decl(const clang::FunctionDecl* FD, llvm::raw_fd_ostream& ost)
+void print_function_decl(const clang::FunctionDecl& FD, llvm::raw_ostream* ost)
 {
-   ost << "\"" << FD->getResultType().getAsString() << " ";
-//   if (const CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(FD)) {
-//      ost << MD->getParent()->getNameAsString() << "::";
-//   }
-   ost << FD->getQualifiedNameAsString() << "(";
+   (*ost) << "\"" << FD.getResultType().getAsString() << " ";
+   (*ost) << FD.getQualifiedNameAsString() << "(";
+
    unsigned pv_count = 0;
-   for (FunctionDecl::param_const_iterator it = FD->param_begin(); it != FD->param_end(); ++it) {
+   for (FunctionDecl::param_const_iterator it = FD.param_begin(); it != FD.param_end(); ++it) {
       if (pv_count++ > 0) {
-         ost << ", ";
+         (*ost) << ", ";
       }
-      ost << (*it)->getOriginalType().getAsString();
+      (*ost) << (*it)->getOriginalType().getAsString();
    }
-   ost << ")\"\n";
+
+   (*ost) << ")\"";
 }
 
 class FunctionBodyRecursiveASTVistor: public clang::RecursiveASTVisitor<FunctionBodyRecursiveASTVistor>
 {
 public:
-   FunctionBodyRecursiveASTVistor(llvm::raw_fd_ostream&);
+   FunctionBodyRecursiveASTVistor(llvm::raw_ostream*);
    virtual bool VisitCallExpr(clang::CallExpr*);
 private:
-   llvm::raw_fd_ostream& ost_;
+   llvm::raw_ostream& ost_;
 };
 
-FunctionBodyRecursiveASTVistor::FunctionBodyRecursiveASTVistor(llvm::raw_fd_ostream& ost) :
-            ost_(ost)
+FunctionBodyRecursiveASTVistor::FunctionBodyRecursiveASTVistor(llvm::raw_ostream* ost) :
+            ost_(*ost)
 {
 }
 
@@ -51,7 +50,8 @@ bool FunctionBodyRecursiveASTVistor::VisitCallExpr(clang::CallExpr* expr)
    const clang::FunctionDecl* callee = expr->getDirectCallee();
    if (!callee) return true;
 
-   print_function_decl(callee, ost_);
+   print_function_decl(*callee, &ost_);
+   ost_ << ", ";
 
    return true;
 }
@@ -59,68 +59,104 @@ bool FunctionBodyRecursiveASTVistor::VisitCallExpr(clang::CallExpr* expr)
 class FunctionFanoutConsumer: public ASTConsumer
 {
 private:
-   llvm::OwningPtr<llvm::raw_fd_ostream> output_;
-   //FunctionBodyRecursiveASTVistor bodyVistor_;
    CompilerInstance& CI_;
+   llvm::raw_ostream& ost_;
 public:
-   FunctionFanoutConsumer(CompilerInstance &CI) :
-               CI_(CI)
+   FunctionFanoutConsumer(CompilerInstance &CI, llvm::raw_ostream* ost) :
+               CI_(CI), ost_(*ost)
    {
-      //llvm::errs() << "output_file:" << CI.getFrontendOpts().OutputFile << "\n";
-      std::string ErrMsg;
-      output_.reset(CI.createOutputFile("", ErrMsg, true, true, CI.getFrontendOpts().OutputFile, "fanout"));
-      if (!ErrMsg.empty()) llvm::errs() << "output file creation failed!\n" << ErrMsg << "\n";
    }
 
    virtual ~FunctionFanoutConsumer()
    {
-      output_->close();
+      //llvm::errs() << __FUNCTION__ << "\n";
+      ost_.flush();
    }
 
    virtual void HandleTopLevelDecl(DeclGroupRef DG)
    {
-      FunctionBodyRecursiveASTVistor bodyVistor_(*output_);
+      FunctionBodyRecursiveASTVistor bodyVistor_(&ost_);
       for (DeclGroupRef::iterator i = DG.begin(), e = DG.end(); i != e; ++i) {
          const Decl *D = *i;
          if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
             if (!FD->hasBody()) continue;
-            SourceLocation loc = FD->getLocation();
-            SourceManager& sm = CI_.getSourceManager();
-            if (sm.isInSystemHeader(loc)) {
+            if (CI_.getSourceManager().isInSystemHeader(FD->getLocation())) {
                //llvm::errs() << "name:" << FD->getQualifiedNameAsString() << ":";
                //loc.print(llvm::errs(), CI_.getSourceManager());
                continue;
             }
-            print_function_decl(FD, *output_);
-            *output_ << ":[\n";
+            print_function_decl(*FD, &ost_);
+            ost_ << ":[";
             bodyVistor_.TraverseStmt(FD->getBody());
-            *output_ << "],\n";
+            ost_ << "],\n";
          }
       }
-      output_->flush();
+
+      ost_.flush();
    }
-}
-;
+};
 
 class ASTAction: public PluginASTAction
 {
+   llvm::raw_fd_ostream* output_;
+
+   void CreateOutput(CompilerInstance& CI)
+   {
+      //llvm::errs() << __FUNCTION__ << ":" << CI.getFrontendOpts().OutputFile << "\n";
+      if (output_) return;
+
+      std::string errMsg;
+      output_ = CI.createOutputFile("", errMsg, true, true, CI.getFrontendOpts().OutputFile, "fanout");
+      if (output_) {
+         (*output_) << "{\n";
+         return;
+      }
+
+      llvm::errs() << "Failed to create output file:" << errMsg << "\n";
+   }
+
 public:
+   ASTAction() :
+               output_(0)
+   {
+   }
    virtual ~ASTAction()
    {
+      //llvm::errs() << __FUNCTION__ << "\n";
    }
 
 protected:
-   ASTConsumer *CreateASTConsumer(CompilerInstance &CI, llvm::StringRef)
+   ASTConsumer *CreateASTConsumer(CompilerInstance &CI, StringRef filename)
    {
-      return new FunctionFanoutConsumer(CI);
+      //llvm::errs() << __FUNCTION__ << ":" << filename << "\n";
+      CreateOutput(CI);
+      return new FunctionFanoutConsumer(CI, output_);
    }
 
-   // override PluginASTAction->ASTFrontendAction->FrontendAction::EndSourceFileAction()
-   // callback should only be called following a successful processing
+#if 0
+   virtual bool BeginSourceFileAction(CompilerInstance& CI, StringRef filename)
+   {
+      llvm::errs() << __FUNCTION__ << ":" << filename << "\n";
+
+      CreateOutput(CI);
+      if (output_) {
+         *output_ << "{\n";
+         // Set to consumer because it could be created before this function invoked.
+         if (consumer_) consumer_->SetRawOStream(output_);
+         return true;
+      }
+
+      return false;
+   }
+
    virtual void EndSourceFileAction()
    {
-      //close actions?
+      llvm::errs() << __FUNCTION__ << "\n";
+
+      *output_ << "}\n";
+      output_->flush();
    }
+#endif
    bool ParseArgs(const CompilerInstance &CI, const std::vector<std::string>& args)
    {
       for (unsigned i = 0, e = args.size(); i != e; ++i) {

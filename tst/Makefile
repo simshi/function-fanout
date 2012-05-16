@@ -14,10 +14,10 @@ SUT_TST_CXXFLAGS := -I.. -Wextra
 
 SUT_LDFLAGS := -L$(LLVM_LIBDIR) -lLLVMSupport -ldl
 
-# philosophy is 'keep quiet if everythin is OK.', so change the GNU/default 'rv' to 'r'
-ARFLAGS:=r
+# The philosophy is 'keep quiet if everything is OK.', so change the GNU/default 'rv' to 'r'
+ARFLAGS:=rc
 
 include GMockWorker.mk
 
 product:
-	$(SILENCE)$(MAKE) -C $(LLVM_OBJ_ROOT)/tools/clang/tools/function-fanout
+	$(SILENCE)$(MAKE) -C $(LLVM_OBJ_ROOT)/tools/clang/tools/function-fanout CXX="g++ -g"
