@@ -12,6 +12,8 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Path.h"
 
+#include "JSONFormatter.h"
+
 using namespace clang;
 
 namespace FunctionFanout {
@@ -61,9 +63,10 @@ class FunctionFanoutConsumer: public ASTConsumer
 private:
    CompilerInstance& CI_;
    llvm::raw_ostream& ost_;
+   JSONFormatter& fmt_;
 public:
-   FunctionFanoutConsumer(CompilerInstance &CI, llvm::raw_ostream* ost) :
-               CI_(CI), ost_(*ost)
+   FunctionFanoutConsumer(CompilerInstance &CI, llvm::raw_ostream* ost, JSONFormatter* fmt) :
+               CI_(CI), ost_(*ost), fmt_(*fmt)
    {
    }
 
@@ -71,6 +74,7 @@ public:
    {
       //llvm::errs() << __FUNCTION__ << "\n";
       ost_.flush();
+      fmt_.EndSourceFile();
    }
 
    virtual void HandleTopLevelDecl(DeclGroupRef DG)
@@ -81,14 +85,19 @@ public:
          if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
             if (!FD->hasBody()) continue;
             if (CI_.getSourceManager().isInSystemHeader(FD->getLocation())) {
-               //llvm::errs() << "name:" << FD->getQualifiedNameAsString() << ":";
                //loc.print(llvm::errs(), CI_.getSourceManager());
                continue;
             }
-            print_function_decl(*FD, &ost_);
-            ost_ << ":[";
+
+            std::vector<std::string> vec;
+            for (FunctionDecl::param_const_iterator it = FD->param_begin(); it != FD->param_end(); ++it) {
+               vec.push_back((*it)->getOriginalType().getAsString());
+            }
+            fmt_.AddDefinition(FD->getQualifiedNameAsString(), FD->getResultType().getAsString(), vec);
+
             bodyVistor_.TraverseStmt(FD->getBody());
-            ost_ << "],\n";
+
+            fmt_.EndDefinition();
          }
       }
 
@@ -107,12 +116,7 @@ class ASTAction: public PluginASTAction
 
       std::string errMsg;
       output_ = CI.createOutputFile("", errMsg, true, true, CI.getFrontendOpts().OutputFile, "fanout");
-      if (output_) {
-         (*output_) << "{\n";
-         return;
-      }
-
-      llvm::errs() << "Failed to create output file:" << errMsg << "\n";
+      if (!output_) llvm::errs() << "Failed to create output file:" << errMsg << "\n";
    }
 
 public:
@@ -130,7 +134,10 @@ protected:
    {
       //llvm::errs() << __FUNCTION__ << ":" << filename << "\n";
       CreateOutput(CI);
-      return new FunctionFanoutConsumer(CI, output_);
+      JSONFormatter* fmt = new JSONFormatter(output_);
+
+      fmt->BeginSourceFile();
+      return new FunctionFanoutConsumer(CI, output_, fmt);
    }
 
 #if 0

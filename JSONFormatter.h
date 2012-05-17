@@ -1,5 +1,7 @@
 #ifndef JSONFORMATTER_H_
 #define JSONFORMATTER_H_
+#include <string>
+#include <vector>
 
 namespace FunctionFanout {
 
@@ -10,8 +12,12 @@ public:
    virtual ~JSONFormatter();
    virtual void BeginSourceFile();
    virtual void EndSourceFile();
+   typedef std::vector<std::string> params_t;
+   virtual void AddDefinition(const std::string name, const std::string type, const params_t& params);
+   virtual void EndDefinition();
 private:
    llvm::raw_ostream& ost_;
+   unsigned num_of_definitions_;
 };
 
 } /* namespace FunctionFanout */
