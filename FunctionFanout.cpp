@@ -33,77 +33,68 @@ void print_function_decl(const clang::FunctionDecl& FD, llvm::raw_ostream* ost)
    (*ost) << ")\"";
 }
 
-class FunctionBodyRecursiveASTVistor: public clang::RecursiveASTVisitor<FunctionBodyRecursiveASTVistor>
-{
-public:
-   FunctionBodyRecursiveASTVistor(llvm::raw_ostream*);
-   virtual bool VisitCallExpr(clang::CallExpr*);
-private:
-   llvm::raw_ostream& ost_;
-};
-
-FunctionBodyRecursiveASTVistor::FunctionBodyRecursiveASTVistor(llvm::raw_ostream* ost) :
-            ost_(*ost)
-{
-}
-
-bool FunctionBodyRecursiveASTVistor::VisitCallExpr(clang::CallExpr* expr)
-{
-   const clang::FunctionDecl* callee = expr->getDirectCallee();
-   if (!callee) return true;
-
-   print_function_decl(*callee, &ost_);
-   ost_ << ", ";
-
-   return true;
-}
-
-class FunctionFanoutConsumer: public ASTConsumer
+class ASTVistor: public clang::ASTConsumer, public clang::RecursiveASTVisitor<ASTVistor>
 {
 private:
    CompilerInstance& CI_;
    llvm::raw_ostream& ost_;
    JSONFormatter& fmt_;
 public:
-   FunctionFanoutConsumer(CompilerInstance &CI, llvm::raw_ostream* ost, JSONFormatter* fmt) :
+   ASTVistor(CompilerInstance &CI, llvm::raw_ostream* ost, JSONFormatter* fmt) :
                CI_(CI), ost_(*ost), fmt_(*fmt)
    {
    }
 
-   virtual ~FunctionFanoutConsumer()
+   virtual ~ASTVistor()
    {
-      //llvm::errs() << __FUNCTION__ << "\n";
-      ost_.flush();
+      //ost_ << __FUNCTION__ << "\n";
       fmt_.EndSourceFile();
    }
 
-   virtual void HandleTopLevelDecl(DeclGroupRef DG)
-   {
-      FunctionBodyRecursiveASTVistor bodyVistor_(&ost_);
-      for (DeclGroupRef::iterator i = DG.begin(), e = DG.end(); i != e; ++i) {
-         const Decl *D = *i;
-         if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
-            if (!FD->hasBody()) continue;
-            if (CI_.getSourceManager().isInSystemHeader(FD->getLocation())) {
-               //loc.print(llvm::errs(), CI_.getSourceManager());
-               continue;
-            }
+   // @override clang::ASTConsumer::
+   virtual void HandleTopLevelDecl(DeclGroupRef DG);
 
-            std::vector<std::string> vec;
-            for (FunctionDecl::param_const_iterator it = FD->param_begin(); it != FD->param_end(); ++it) {
-               vec.push_back((*it)->getOriginalType().getAsString());
-            }
-            fmt_.AddDefinition(FD->getQualifiedNameAsString(), FD->getResultType().getAsString(), vec);
-
-            bodyVistor_.TraverseStmt(FD->getBody());
-
-            fmt_.EndDefinition();
-         }
-      }
-
-      ost_.flush();
-   }
+   // @override clang::RecursiveASTVisitor<>::
+   virtual bool VisitCallExpr(clang::CallExpr* expr);
 };
+
+void ASTVistor::HandleTopLevelDecl(DeclGroupRef DG)
+{
+   for (DeclGroupRef::iterator i = DG.begin(), e = DG.end(); i != e; ++i) {
+      const Decl *D = *i;
+      if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
+         if (!FD->hasBody()) continue;
+         if (CI_.getSourceManager().isInSystemHeader(FD->getLocation())) {
+            //loc.print(llvm::errs(), CI_.getSourceManager());
+            continue;
+         }
+
+         std::vector<std::string> params;
+         for (FunctionDecl::param_const_iterator it = FD->param_begin(); it != FD->param_end(); ++it) {
+            params.push_back((*it)->getOriginalType().getAsString());
+         }
+
+         fmt_.AddDefinition(FD->getQualifiedNameAsString(), FD->getResultType().getAsString(), params);
+
+         this->TraverseStmt(FD->getBody());
+
+         fmt_.EndDefinition();
+      }
+   }
+
+   ost_.flush();
+}
+
+bool ASTVistor::VisitCallExpr(clang::CallExpr* expr)
+{
+   const clang::FunctionDecl* callee = expr->getDirectCallee();
+   if (callee) {
+      print_function_decl(*callee, &ost_);
+      ost_ << ", ";
+   }
+
+   return true;
+}
 
 class ASTAction: public PluginASTAction
 {
@@ -137,7 +128,7 @@ protected:
       JSONFormatter* fmt = new JSONFormatter(output_);
 
       fmt->BeginSourceFile();
-      return new FunctionFanoutConsumer(CI, output_, fmt);
+      return new ASTVistor(CI, output_, fmt);
    }
 
 #if 0
