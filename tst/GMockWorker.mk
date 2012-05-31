@@ -24,6 +24,7 @@ ifndef SUT_OBJS_DIR
   SUT_OBJS_DIR := _objs
 endif
 WK_OBJS_DIR := $(SUT_ROOT)/$(SUT_OBJS_DIR)
+WK_OUTPUT := $(WK_OBJS_DIR)/$(SUT_OUTPUT)
 
 ### Macros ###
 get_src = $(wildcard $1/*.cpp) $(wildcard $1/*.cc)
@@ -50,18 +51,18 @@ WK_TST_CXXFLAGS := -I$(GTEST_ROOT)/include -I$(GMOCK_ROOT)/include $(SUT_TST_CXX
 ### Targets ###
 .PHONY: all compile clean veryclean
 all: compile
-	./$(SUT_OUTPUT)
+	./$(WK_OUTPUT)
 
-compile: $(SUT_OUTPUT)
+compile: $(WK_OUTPUT)
 
 clean:
-	-$(SILENCE)rm -rf $(SUT_OUTPUT) $(SUT_CLEAN_TARGETS)
+	-$(SILENCE)rm -rf $(WK_OUTPUT) $(SUT_CLEAN_TARGETS)
 	-$(SILENCE)rm -rf $(WK_OBJS_DIR)
 
 veryclean: clean
 	-$(SILENCE)rm -rf $(SUT_VERYCLEAN_TARGETS)
 
-$(SUT_OUTPUT): $(WK_ALL_TST_OBJS) $(WK_SUT_SRC_LIB) $(GMOCK_MAIN_LIB)
+$(WK_OUTPUT): $(WK_ALL_TST_OBJS) $(WK_SUT_SRC_LIB) $(GMOCK_MAIN_LIB)
 	@echo linking [$@]
 	$(SILENCE)$(CXX) -o $@ $^ $(LDFLAGS) $(TARGET_ARCH)
 

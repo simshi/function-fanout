@@ -7,7 +7,7 @@
 #include "clang/AST/AST.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
-#include "clang/Index/CallGraph.h"
+#include "clang/Analysis/CallGraph.h"
 #include "clang/Basic/SourceManager.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Path.h"
@@ -17,21 +17,6 @@
 using namespace clang;
 
 namespace FunctionFanout {
-void print_function_decl(const clang::FunctionDecl& FD, llvm::raw_ostream* ost)
-{
-   (*ost) << "\"" << FD.getResultType().getAsString() << " ";
-   (*ost) << FD.getQualifiedNameAsString() << "(";
-
-   unsigned pv_count = 0;
-   for (FunctionDecl::param_const_iterator it = FD.param_begin(); it != FD.param_end(); ++it) {
-      if (pv_count++ > 0) {
-         (*ost) << ", ";
-      }
-      (*ost) << (*it)->getOriginalType().getAsString();
-   }
-
-   (*ost) << ")\"";
-}
 
 class ASTVistor: public clang::ASTConsumer, public clang::RecursiveASTVisitor<ASTVistor>
 {
@@ -52,13 +37,13 @@ public:
    }
 
    // @override clang::ASTConsumer::
-   virtual void HandleTopLevelDecl(DeclGroupRef DG);
+   virtual bool HandleTopLevelDecl(DeclGroupRef DG);
 
    // @override clang::RecursiveASTVisitor<>::
    virtual bool VisitCallExpr(clang::CallExpr* expr);
 };
 
-void ASTVistor::HandleTopLevelDecl(DeclGroupRef DG)
+bool ASTVistor::HandleTopLevelDecl(DeclGroupRef DG)
 {
    for (DeclGroupRef::iterator i = DG.begin(), e = DG.end(); i != e; ++i) {
       const Decl *D = *i;
@@ -83,15 +68,34 @@ void ASTVistor::HandleTopLevelDecl(DeclGroupRef DG)
    }
 
    ost_.flush();
+
+   return true;
 }
 
 bool ASTVistor::VisitCallExpr(clang::CallExpr* expr)
 {
-   const clang::FunctionDecl* callee = expr->getDirectCallee();
-   if (callee) {
-      print_function_decl(*callee, &ost_);
-      ost_ << ", ";
+   const clang::FunctionDecl* FD = expr->getDirectCallee();
+   if (!FD) {
+      // Maybe a function pointer
+//      const Decl *D = expr->getCalleeDecl();
+//      const VarDecl* VD = dyn_cast<VarDecl>(D);
+//      SourceLocation loc = expr->getLocStart();
+//      bool inv;
+//      unsigned ln = CI_.getSourceManager().getExpansionLineNumber(loc, &inv);
+//      llvm::errs() << "not a FunctionDecl in CallExpr:{kind:" << D->getDeclKindName();
+//      if (VD) {
+//         llvm::errs() << ", name:" << VD->getQualifiedNameAsString();
+//      }
+//      llvm::errs() << ", ln:" << ln << "}\n";
+
+      return true;
    }
+
+   std::vector<std::string> params;
+   for (FunctionDecl::param_const_iterator it = FD->param_begin(); it != FD->param_end(); ++it) {
+      params.push_back((*it)->getOriginalType().getAsString());
+   }
+   fmt_.AddCallee(FD->getQualifiedNameAsString(), FD->getResultType().getAsString(), params);
 
    return true;
 }

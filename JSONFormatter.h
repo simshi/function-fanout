@@ -15,9 +15,13 @@ public:
    typedef std::vector<std::string> params_t;
    virtual void AddDefinition(const std::string name, const std::string type, const params_t& params);
    virtual void EndDefinition();
+   virtual void AddCallee(const std::string name, const std::string type, const params_t& params);
 private:
    llvm::raw_ostream& ost_;
    unsigned num_of_definitions_;
+   unsigned num_of_callees_;
+
+   void FormatFunction(const std::string name, const std::string type, const params_t& params);
 };
 
 } /* namespace FunctionFanout */

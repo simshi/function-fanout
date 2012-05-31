@@ -20,4 +20,4 @@ ARFLAGS:=rc
 include GMockWorker.mk
 
 product:
-	$(SILENCE)$(MAKE) -C $(LLVM_OBJ_ROOT)/tools/clang/tools/function-fanout CXX="g++ -g"
+	$(SILENCE)$(MAKE) -C $(LLVM_OBJ_ROOT)/tools/clang/tools/function-fanout CXX="clang++ -g"

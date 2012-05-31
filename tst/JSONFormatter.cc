@@ -45,7 +45,13 @@ TEST_F(JSONFormatterTest, empty)
    ASSERT_STREQ(STR_FILE_BEGIN STR_FILE_END, testOutput.str().c_str());
 }
 
-#define STR_FUNC0_OPEN "\"type0 func0()\":["
+#define STR_FUNC0_RAW "\"type0 func0()\""
+#define STR_FUNC1_RAW "\"type1 func1(param_type1)\""
+#define STR_FUNC3_RAW "\"type3 func3(param_type1, param_type2, param_type3)\""
+#define STR_FUNC_OPEN ":["
+#define STR_FUNC_END "]"
+
+#define STR_FUNC0_OPEN STR_FUNC0_RAW STR_FUNC_OPEN
 TEST_F(JSONFormatterTest, one_definition)
 {
    JSONFormatter fmt(&testOutput);
@@ -55,8 +61,7 @@ TEST_F(JSONFormatterTest, one_definition)
    ASSERT_STREQ(STR_FUNC0_OPEN, testOutput.str().c_str());
 }
 
-#define STR_FUNC_END "]"
-#define STR_FUNC1_OPEN "\"type1 func1(param_type1)\":["
+#define STR_FUNC1_OPEN STR_FUNC1_RAW STR_FUNC_OPEN
 #define STR_FUNC1 STR_FUNC1_OPEN STR_FUNC_END
 TEST_F(JSONFormatterTest, one_definition_with_one_param)
 {
@@ -68,7 +73,7 @@ TEST_F(JSONFormatterTest, one_definition_with_one_param)
    ASSERT_STREQ(STR_FUNC1, testOutput.str().c_str());
 }
 
-#define STR_FUNC3_OPEN "\"type3 func3(param_type1, param_type2, param_type3)\":["
+#define STR_FUNC3_OPEN STR_FUNC3_RAW STR_FUNC_OPEN
 #define STR_FUNC3 STR_FUNC3_OPEN STR_FUNC_END
 TEST_F(JSONFormatterTest, one_definition_with_3_params)
 {
@@ -107,5 +112,41 @@ TEST_F(JSONFormatterTest, 3_definitions_with_different_params)
    fmt.EndSourceFile();
 
    ASSERT_STREQ(STR_FILE_BEGIN STR_FUNC1 STR_FUNC_SEP STR_FUNC0 STR_FUNC_SEP STR_FUNC3 STR_FILE_END,
+                testOutput.str().c_str());
+}
+
+TEST_F(JSONFormatterTest, one_callee)
+{
+   JSONFormatter fmt(&testOutput);
+
+   fmt.AddCallee("func0", "type0", params0);
+
+   ASSERT_STREQ(STR_FUNC0_RAW, testOutput.str().c_str());
+}
+
+#define STR_CALLEE_SEP ", "
+TEST_F(JSONFormatterTest, three_callee)
+{
+   JSONFormatter fmt(&testOutput);
+
+   fmt.AddCallee("func3", "type3", params3);
+   fmt.AddCallee("func0", "type0", params0);
+   fmt.AddCallee("func1", "type1", params1);
+
+   ASSERT_STREQ(STR_FUNC3_RAW STR_CALLEE_SEP STR_FUNC0_RAW STR_CALLEE_SEP STR_FUNC1_RAW,
+                testOutput.str().c_str());
+}
+
+TEST_F(JSONFormatterTest, two_callee_one_definition_one_callee)
+{
+   JSONFormatter fmt(&testOutput);
+
+   fmt.AddDefinition("func3", "type3", params3);
+   fmt.AddCallee("func0", "type0", params0);
+   fmt.EndDefinition();
+   fmt.AddDefinition("func1", "type1", params1);
+   fmt.AddCallee("func1", "type1", params1);
+
+   ASSERT_STREQ(STR_FUNC3_OPEN STR_FUNC0_RAW STR_FUNC_END STR_FUNC_SEP STR_FUNC1_OPEN STR_FUNC1_RAW,
                 testOutput.str().c_str());
 }

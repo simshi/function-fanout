@@ -4,7 +4,7 @@
 namespace FunctionFanout {
 
 JSONFormatter::JSONFormatter(llvm::raw_ostream* ost) :
-            ost_(*ost), num_of_definitions_(0)
+            ost_(*ost), num_of_definitions_(0), num_of_callees_(0)
 {
 
 }
@@ -24,10 +24,8 @@ void JSONFormatter::EndSourceFile()
    ost_.flush();
 }
 
-void JSONFormatter::AddDefinition(const std::string name, const std::string type, const params_t& params)
+void JSONFormatter::FormatFunction(const std::string name, const std::string type, const params_t& params)
 {
-   if (num_of_definitions_ > 0) ost_ << ",\n";
-
    ost_ << "\"" << type << " " << name << "(";
 
    std::vector<std::string>::const_iterator it = params.begin();
@@ -39,13 +37,31 @@ void JSONFormatter::AddDefinition(const std::string name, const std::string type
       }
    }
 
-   ost_ << ")\":[";
+   ost_ << ")\"";
+}
+
+void JSONFormatter::AddDefinition(const std::string name, const std::string type, const params_t& params)
+{
+   if (num_of_definitions_ > 0) ost_ << ",\n";
+
+   FormatFunction(name, type, params);
+   ost_ << ":[";
+
    ++num_of_definitions_;
 }
 
 void JSONFormatter::EndDefinition()
 {
    ost_ << "]";
+
+   num_of_callees_ = 0;
 }
 
+void JSONFormatter::AddCallee(const std::string name, const std::string type, const params_t& params)
+{
+   if (num_of_callees_ > 0) ost_ << ", ";
+   FormatFunction(name, type, params);
+
+   ++num_of_callees_;
+}
 } /* namespace FunctionFanout */
